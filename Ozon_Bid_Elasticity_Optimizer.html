@@ -33,7 +33,7 @@
         <div class="section-kicker">ROLLING МОДЕЛЬ</div>
         <h2>История для day-to-day эластичности</h2>
       </div>
-      <button id="last21" class="btn ghost" type="button">Последние 21 полный день</button>
+      <button id="last21" class="btn ghost" type="button">Весь загруженный интервал</button>
     </div>
     <div class="controls-grid rolling-controls">
       <label>Кампания<select id="campaignSelect"><option value="">—</option></select></label>
@@ -41,7 +41,7 @@
       <label>Анализ по<input id="analysisEnd" type="date"></label>
       <label>Мин. изменение CPC, %<input id="minCpcChange" type="number" min="1" max="50" step="1" value="5"><span class="control-help">Меньшие колебания считаются шумом</span></label>
       <label>Max marginal CPO, ₽<input id="maxIncCpo" type="number" min="0" step="50" placeholder="не задан"><span class="control-help">Экономический veto на повышение</span></label>
-      <label>Bootstrap итераций<select id="bootstrapIterations"><option>200</option><option selected>400</option><option>800</option></select></label>
+      <label>CI bootstrap<select id="bootstrapIterations"><option>200</option><option selected>400</option><option>800</option></select><span class="control-help">Для интервалов E; p-value считается отдельным randomization-тестом</span></label>
     </div>
     <div id="windowNote" class="note"></div>
   </section>
@@ -63,7 +63,7 @@
       </div>
       <div class="table-actions">
         <label class="compact">Рекомендация<select id="recommendationFilter"><option value="ALL">Все</option><option value="RAISE">Повысить</option><option value="LOWER">Снизить</option><option value="TRAFFIC_TRAP">Трафиковая ловушка</option><option value="HOLD">Не менять</option><option value="INSUFFICIENT">Недостаточно данных</option></select></label>
-        <label class="compact measurement-filter">Измерение E<select id="measurementFilter"><option value="ALL">Все</option><option value="MEASURED">Измерена</option><option value="NEAR_ZERO">Измерена ≈ 0</option><option value="CPC_NOT_EXCITED">Нужен CPC-тест</option><option value="LOW_OUTCOME_POWER">Мало заказов</option><option value="CONFOUNDED">Смешано с расходом</option><option value="WIDE_UNCERTAINTY">Широкая неопределённость</option><option value="DATA_QUALITY">Качество данных</option><option value="INACTIVE_CURRENT">Нет активного CPC</option></select></label>
+        <label class="compact measurement-filter">Измерение E<select id="measurementFilter"><option value="ALL">Все</option><option value="MEASURED">Измерена</option><option value="NEAR_ZERO">Измерена ≈ 0</option><option value="CPC_NOT_EXCITED">Нужен CPC-тест</option><option value="LOW_OUTCOME_POWER">Мало заказов</option><option value="CONFOUNDED">Смешано с расходом</option><option value="LAG_SENSITIVE">Чувствительно к лагу</option><option value="TEMPORAL_SHIFT">Смена режима</option><option value="WIDE_UNCERTAINTY">Широкая неопределённость</option><option value="DATA_QUALITY">Качество данных</option><option value="INACTIVE_CURRENT">Нет активного CPC</option></select></label>
         <label class="compact">Уверенность ≥ <input id="minConfidence" type="number" min="0" max="100" value="0"></label>
         <button id="exportCsv" class="btn" type="button">Экспорт CSV</button>
       </div>
@@ -107,15 +107,16 @@
     <summary>Как считается rolling-рекомендация и математическая уверенность</summary>
     <div class="method-grid">
       <div><h3>Day-to-day E</h3><p>Для каждой пары соседних полных дней с |ΔCPC| не меньше заданного порога считается симметричная arc-elasticity кликов, корзин и общих заказов. Итоговая E — взвешенная медиана локальных E.</p></div>
-      <div><h3>Поправка на расход</h3><p>Решение опирается на first-difference модель Δlog(orders+1) ~ Δlog(CPC) + Δlog(spend+1). Для коэффициента CPC выполняется детерминированный wild-bootstrap: p≤0,05 — сильное доказательство, p≤0,15 — только малый тест ±5% при подтверждении воронкой.</p></div>
-      <div><h3>Два слоя знания</h3><p>«Текущий режим» показывает, хорошо ли изучена работа SKU сейчас. «Измерение E» отдельно оценивает, было ли достаточно независимых CPC-возмущений, CPC-зон, заказов и независимости от расхода. Много дней не равно хорошо измеренной эластичности.</p></div>
-      <div><h3>Эксперимент для E</h3><p>Если E не идентифицирована, приложение проектирует следующую точку фактического CPC и минимальное число полных дней по требуемому объёму кликов, корзин и заказов. Это план набора информации, а не обещание заданной statistical power.</p></div>
+      <div><h3>Поправка на расход</h3><p>Решение опирается на first-difference модель Δlog(orders+1) ~ Δlog(CPC) + Δlog(spend+1). Для коэффициента CPC выполняется residual circular-shift randomization test после удаления эффекта расхода. На синтетической нулевой модели он откалиброван примерно к заявленному уровню: p≤0,05 — сильное доказательство, p≤0,15 — только малый тест ±5%.</p></div>
+      <div><h3>Два слоя знания</h3><p>По умолчанию расчёт берёт весь загруженный полный интервал РК — от первой даты отчёта до последнего полного дня. «Текущий режим» при этом оценивается по последним 14 полным дням, чтобы старая история не маскировала текущее состояние.</p></div>
+      <div><h3>Эксперимент для E</h3><p>Если E не идентифицирована, приложение проектирует следующую точку фактического CPC и минимальное число полных дней по текущему темпу событий. Дополнительно проверяется +1 день лага заказов: противоположные статистически заметные знаки блокируют изменение CPC и требуют многодневного теста.</p></div>
     </div>
     <p class="footnote">* «Общие заказы» — оценка заказанных единиц по общей сумме заказов. Это не уникальные покупатели. Текущий неполный день автоматически исключается, если совпадает с локальной датой. Score текущего режима и score идентифицируемости — разные диагностические шкалы, не вероятности правильности. p-value проверяет статистическую совместимость наблюдаемого spend-adjusted эффекта с нулевой гипотезой; даже он не доказывает причинность при внешних изменениях спроса, цены или наличия.</p>
   </details>
 </div>
 
 <script src="elasticity.js"></script>
+<script src="robustness.js"></script>
 <script src="xlsx.js"></script>
 <script src="app.js"></script>
 </body>
